@@ -108,6 +108,25 @@ def build_parser() -> argparse.ArgumentParser:
     task_remove.add_argument("--task-name", default="VibeFlow Core")
     task_remove.set_defaults(handler=cmd_task_remove)
 
+    agent = sub.add_parser("agent", help="Create one selected agent instruction file")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+    agent_list = agent_sub.add_parser("list", help="List supported agent instruction targets")
+    add_json_arg(agent_list)
+    agent_list.set_defaults(handler=cmd_agent_list)
+    agent_init = agent_sub.add_parser("init", help="Write only the selected agent instruction file")
+    agent_init.add_argument(
+        "agent",
+        choices=sorted(AGENT_FILES),
+        help="Agent instruction target to create",
+    )
+    agent_init.add_argument("--path", default=".", help="Repository/project path where the file should be written")
+    agent_init.add_argument(
+        "--keep-existing",
+        action="store_true",
+        help="Do not remove other known agent instruction files first",
+    )
+    agent_init.set_defaults(handler=cmd_agent_init)
+
     doctor = sub.add_parser("doctor", help="Check local runtime requirements")
     add_server_args(doctor)
     add_json_arg(doctor)
@@ -250,6 +269,30 @@ def cmd_task_remove(args: argparse.Namespace) -> int:
     return run(command, cwd=repo_root())
 
 
+def cmd_agent_list(args: argparse.Namespace) -> int:
+    rows = {
+        key: {
+            "file": str(value["path"]),
+            "description": value["description"],
+        }
+        for key, value in AGENT_FILES.items()
+    }
+    return print_response(rows, getattr(args, "json", False))
+
+
+def cmd_agent_init(args: argparse.Namespace) -> int:
+    target_root = Path(args.path).resolve()
+    spec = AGENT_FILES[args.agent]
+    if not args.keep_existing:
+        remove_known_agent_files(target_root, keep=args.agent)
+
+    output_path = target_root / spec["path"]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_agent_template(args.agent), encoding="utf-8")
+    print(f"Created {args.agent} agent file: {output_path}")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     checks = {
         "python": sys.version.split()[0],
@@ -377,6 +420,114 @@ def run(command: list[str], cwd: Path | None = None) -> int:
     print(f"$ {' '.join(command)}")
     completed = subprocess.run(command, cwd=str(cwd) if cwd else None, check=True)
     return completed.returncode
+
+
+AGENT_FILES: dict[str, dict[str, Any]] = {
+    "claude": {
+        "path": Path("CLAUDE.md"),
+        "description": "Claude Code repository instructions",
+    },
+    "codex": {
+        "path": Path("AGENTS.md"),
+        "description": "Codex / OpenAI coding agent instructions",
+    },
+    "generic": {
+        "path": Path("AGENTS.md"),
+        "description": "Generic instructions for agents that read AGENTS.md",
+    },
+    "gemini": {
+        "path": Path("GEMINI.md"),
+        "description": "Gemini CLI / Gemini coding agent instructions",
+    },
+    "copilot": {
+        "path": Path(".github") / "copilot-instructions.md",
+        "description": "GitHub Copilot coding agent instructions",
+    },
+    "cursor": {
+        "path": Path(".cursor") / "rules" / "vibeflow.mdc",
+        "description": "Cursor rules file",
+    },
+}
+
+
+def remove_known_agent_files(root: Path, keep: str) -> None:
+    keep_path = (root / AGENT_FILES[keep]["path"]).resolve()
+    for spec in AGENT_FILES.values():
+        path = (root / spec["path"]).resolve()
+        if path == keep_path:
+            continue
+        if path.exists():
+            path.unlink()
+            remove_empty_parents(path.parent, root)
+
+
+def remove_empty_parents(path: Path, stop: Path) -> None:
+    current = path
+    stop = stop.resolve()
+    while current != stop and current.exists():
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
+def render_agent_template(agent: str) -> str:
+    title = {
+        "claude": "Claude Code Instructions",
+        "codex": "Codex Instructions",
+        "generic": "Agent Instructions",
+        "gemini": "Gemini Instructions",
+        "copilot": "GitHub Copilot Coding Agent Instructions",
+        "cursor": "Cursor Agent Rule",
+    }[agent]
+    return f"""# {title} for VibeFlow
+
+Repository: https://github.com/alperensu/VibeFlow
+
+When the user asks to install or use VibeFlow, install it automatically unless they explicitly ask only to inspect the code.
+
+## Install
+
+On Windows PowerShell:
+
+```powershell
+$installer = Join-Path $env:TEMP "vibeflow-install.ps1"
+Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/alperensu/VibeFlow/main/install.ps1" -OutFile $installer
+powershell -ExecutionPolicy Bypass -File $installer -Source "https://github.com/alperensu/VibeFlow"
+```
+
+If this repository is already cloned:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\\install.ps1 -Source "https://github.com/alperensu/VibeFlow"
+```
+
+## Start
+
+```powershell
+$vf = Join-Path $HOME ".vibeflow\\VibeFlow\\.venv\\Scripts\\vibeflow.exe"
+& $vf start --project-root "C:\\path\\to\\project" --port 7400
+```
+
+## Manage
+
+```powershell
+vibeflow doctor
+vibeflow status --port 7400
+vibeflow settings --port 7400
+vibeflow index "C:\\path\\to\\project" --port 7400
+vibeflow context --project-root "C:\\path\\to\\project" --current-file "src\\app.py" --cursor-line 42 --intent "Refactor validation flow" --port 7400
+```
+
+## Repository Rules
+
+- Use terminal automation instead of asking the user to manually create `.venv`.
+- Keep runtime artifacts out of commits: `.venv/`, `.vibeflow/`, `__pycache__/`, `.pytest_cache/`, `*.egg-info/`.
+- After code changes, run tests.
+- Push to `origin main` after verification when credentials are available.
+- Do not add instruction files for other agents. If a different agent file is needed, run `vibeflow agent init <agent>`.
+"""
 
 
 if __name__ == "__main__":

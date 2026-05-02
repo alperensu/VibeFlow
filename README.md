@@ -59,7 +59,7 @@ Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/alperensu/
 powershell -ExecutionPolicy Bypass -File $installer -Source "https://github.com/alperensu/VibeFlow"
 ```
 
-Inside Claude Code or any terminal agent, the repository URL is enough. Ask it to install:
+Inside any terminal-capable agent, the repository URL is enough. Ask it to install:
 
 ```powershell
 vibeflow install https://github.com/alperensu/VibeFlow
@@ -151,7 +151,41 @@ vibeflow install https://github.com/alperensu/VibeFlow
 
 The `context` command prints the selected files/symbols, total estimated token saving, every optimization effect, and the final `context_string`.
 
-Claude Code agents should also read [CLAUDE.md](CLAUDE.md), which contains the automatic install/start procedure for this repository.
+## Agent Instruction Files
+
+VibeFlow does not ship multiple active agent instruction files. The user chooses the agent they use, and the CLI creates only that file while cleaning the other known agent files.
+
+Supported targets:
+
+```powershell
+vibeflow agent list
+```
+
+Create the instruction file for the selected agent:
+
+```powershell
+vibeflow agent init claude
+vibeflow agent init codex
+vibeflow agent init gemini
+vibeflow agent init copilot
+vibeflow agent init cursor
+vibeflow agent init generic
+```
+
+Examples:
+
+```powershell
+vibeflow agent init claude
+# creates CLAUDE.md only
+
+vibeflow agent init copilot
+# creates .github/copilot-instructions.md only
+
+vibeflow agent init cursor
+# creates .cursor/rules/vibeflow.mdc only
+```
+
+Use `--keep-existing` only if you intentionally want to keep previously generated agent files.
 
 ## Windows Auto Start
 
