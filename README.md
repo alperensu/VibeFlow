@@ -45,6 +45,34 @@ run.py      server entry point
 
 ## Quick Start
 
+Install directly from GitHub:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 https://github.com/alperensu/VibeFlow
+```
+
+From a clean machine without cloning first:
+
+```powershell
+$installer = Join-Path $env:TEMP "vibeflow-install.ps1"
+Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/alperensu/VibeFlow/main/install.ps1" -OutFile $installer
+powershell -ExecutionPolicy Bypass -File $installer -Source "https://github.com/alperensu/VibeFlow"
+```
+
+Inside Claude Code or any terminal agent, the repository URL is enough. Ask it to install:
+
+```powershell
+vibeflow install https://github.com/alperensu/VibeFlow
+```
+
+The installer accepts these source forms:
+
+```text
+https://github.com/alperensu/VibeFlow
+https://github.com/alperensu/VibeFlow.git
+alperensu/VibeFlow
+```
+
 From the project you want VibeFlow to watch:
 
 ```powershell
@@ -65,6 +93,7 @@ That single command:
 4. Starts the local API at `http://127.0.0.1:7400`.
 5. Indexes the current directory.
 6. Starts the file watcher.
+7. Installs the `vibeflow` terminal command inside `.venv`.
 
 To watch a specific project:
 
@@ -77,15 +106,52 @@ C:\Users\alper\Desktop\VibeFlow\vibeflow.ps1 -ProjectRoot "C:\path\to\project"
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python run.py --port 7400 --project-root "C:/path/to/project"
+pip install -e ".[dev]"
+vibeflow start --port 7400 --project-root "C:/path/to/project"
 ```
 
 Health check:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:7400/health
+vibeflow status --port 7400
 ```
+
+## Terminal Control
+
+After installation, VibeFlow can be managed entirely from the terminal:
+
+```powershell
+vibeflow doctor
+vibeflow start --project-root "C:\path\to\project" --port 7400
+vibeflow status --port 7400
+vibeflow settings --port 7400
+vibeflow index "C:\path\to\project" --port 7400
+```
+
+Build context from the terminal:
+
+```powershell
+vibeflow context `
+  --project-root "C:\path\to\project" `
+  --current-file "src/app.py" `
+  --cursor-line 42 `
+  --intent "Refactor validation flow" `
+  --profile maximum_savings `
+  --setting semantic_pruning=true `
+  --setting function_level_retrieval=true `
+  --setting include_cross_file_callees=true `
+  --port 7400
+```
+
+Install or update from GitHub with the CLI:
+
+```powershell
+vibeflow install https://github.com/alperensu/VibeFlow
+```
+
+The `context` command prints the selected files/symbols, total estimated token saving, every optimization effect, and the final `context_string`.
+
+Claude Code agents should also read [CLAUDE.md](CLAUDE.md), which contains the automatic install/start procedure for this repository.
 
 ## Windows Auto Start
 

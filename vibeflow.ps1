@@ -61,7 +61,7 @@ $Python = $VenvPython
 if (-not $NoInstall) {
     Write-Host "Bagimliliklar kontrol ediliyor/yukleniyor..."
     & $Python -m pip install --upgrade pip
-    & $Python -m pip install -r requirements.txt
+    & $Python -m pip install -e ".[dev]"
 }
 
 $watchArgs = @()
