@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 import config
 from core.context_builder import ContextBuilder, ContextRequest
 from core.indexer import ProjectIndex
+from core.settings import PROFILES, SETTING_OPTIONS, resolve_settings
 from core.sieve import parse_file
 from core.watcher import WatcherEngine
 
@@ -65,7 +66,9 @@ class ContextRequestModel(BaseModel):
     current_file: str | None = None
     cursor_line: int | None = Field(default=None, ge=1)
     intent: str = ""
-    max_files: int = Field(default=8, ge=1, le=32)
+    max_files: int | None = Field(default=None, ge=1, le=64)
+    profile: str = Field(default="maximum_savings", description="Optimization profile")
+    settings: dict[str, Any] | None = Field(default=None, description="Per-request optimization overrides")
 
 
 class SieveRequest(BaseModel):
@@ -80,6 +83,21 @@ def health() -> dict[str, Any]:
         "auto_bootstrap": getattr(app.state, "auto_bootstrap", None),
         "indexes": list(_indexes.keys()),
         "watchers": {root: watcher.running for root, watcher in _watchers.items()},
+        "profiles": list(PROFILES.keys()),
+    }
+
+
+@app.get("/settings/options")
+def settings_options() -> dict[str, Any]:
+    return {
+        "default_profile": "maximum_savings",
+        "profiles": {name: profile.to_dict() for name, profile in PROFILES.items()},
+        "options": SETTING_OPTIONS,
+        "usage": {
+            "profile": "Set profile on /context: maximum_savings, balanced, quality, debug_fuller.",
+            "settings": "Override any setting per request, e.g. {'semantic_pruning': false, 'max_symbols': 24}.",
+            "impact_report": "Every /context response includes stats.optimization_effects with estimated token impact.",
+        },
     }
 
 
@@ -110,12 +128,14 @@ def build_context(payload: ContextRequestModel) -> dict[str, Any]:
         index.index_project()
 
     current_file = Path(payload.current_file) if payload.current_file else None
+    settings = resolve_settings(payload.profile, payload.settings)
     request = ContextRequest(
         project_root=root,
         current_file=current_file,
         cursor_line=payload.cursor_line,
         intent=payload.intent,
         max_files=payload.max_files,
+        settings=settings,
     )
     package = ContextBuilder(index).build(request)
     return {

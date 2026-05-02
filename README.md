@@ -103,6 +103,21 @@ powershell -ExecutionPolicy Bypass -File .\scripts\remove-windows-task.ps1
 
 ## API
 
+### Inspect Optimization Settings
+
+```http
+GET /settings/options
+```
+
+This returns the available profiles, every user-facing optimization switch, and the expected token/latency trade-off for each one.
+
+Built-in profiles:
+
+- `maximum_savings`: smallest prompt footprint, strict file/symbol budgets.
+- `balanced`: more context while keeping pruning and caching enabled.
+- `quality`: wider retrieval budgets for harder refactors.
+- `debug_fuller`: disables the main savings path so you can inspect fuller context.
+
 ### Index a Project
 
 ```http
@@ -126,7 +141,16 @@ Content-Type: application/json
   "current_file": "src/app.py",
   "cursor_line": 42,
   "intent": "Refactor validation flow",
-  "max_files": 8
+  "profile": "maximum_savings",
+  "settings": {
+    "semantic_pruning": true,
+    "function_level_retrieval": true,
+    "include_cross_file_callees": true,
+    "prompt_caching": true,
+    "diff_only_output": true,
+    "max_files": 6,
+    "max_symbols": 12
+  }
 }
 ```
 
@@ -166,7 +190,22 @@ Response shape:
   "stats": {
     "latency_ms": 12.4,
     "files_selected": 8,
-    "estimated_token_saving_percent": 91.3
+    "symbols_selected": 12,
+    "estimated_total_token_saving_percent": 91.3,
+    "optimization_effects": [
+      {
+        "key": "semantic_pruning",
+        "enabled": true,
+        "estimated_saved_tokens": 42000,
+        "basis": "project raw tokens minus selected raw file tokens"
+      },
+      {
+        "key": "prompt_caching",
+        "enabled": true,
+        "estimated_cacheable_tokens": 3200,
+        "basis": "static context tokens eligible for provider prompt caching"
+      }
+    ]
   },
   "warnings": []
 }
@@ -192,9 +231,13 @@ VibeFlow reduces context size with a layered pipeline:
 
 1. **Skeletonization** keeps structural code shape while removing implementation bodies.
 2. **Semantic pruning** selects only relevant files from the local vector cache.
-3. **Active body extraction** includes the function at the cursor plus directly called local functions.
-4. **Prompt caching layout** separates stable project context from per-task dynamic context.
-5. **Diff-only output** prevents full-file restatement after context has already been supplied.
+3. **Function-level retrieval** indexes functions/classes separately so matched symbols can be supplied without whole files.
+4. **Cross-file callee expansion** resolves directly called symbols by name and includes only those bodies.
+5. **Active body extraction** includes the function at the cursor plus directly called local functions.
+6. **Prompt caching layout** separates stable project context from per-task dynamic context.
+7. **Diff-only output** prevents full-file restatement after context has already been supplied.
+
+Each `/context` response includes `stats.optimization_effects`, so clients can show users which settings saved prompt tokens, which settings add context for quality, and how many static tokens are cacheable.
 
 ## Development
 
